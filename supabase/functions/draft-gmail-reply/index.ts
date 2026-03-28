@@ -15,8 +15,8 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === "string" && v.trim().length > 0;
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v.trim() : fallback;
 }
 
 serve(async (req) => {
@@ -37,45 +37,37 @@ serve(async (req) => {
     return jsonResponse({ error: "Invalid JSON body." }, 400);
   }
 
-  // --- Validate required fields ---
-  const requiredFields = ["subject", "senderName", "senderEmail", "latestMessage"] as const;
-  for (const field of requiredFields) {
-    if (!isNonEmptyString(body[field])) {
-      return jsonResponse({ error: `"${field}" is required and must be a non-empty string.` }, 400);
-    }
-  }
+  // --- Tolerant extraction with safe defaults ---
+  const subject = str(body.subject, "(No subject)");
+  const senderName = str(body.senderName);
+  const senderEmail = str(body.senderEmail);
+  const latestMessage = str(body.latestMessage);
+  const sourceUrl = str(body.sourceUrl);
+  const identity = str(body.identity);
+  const replyStyle = str(body.replyStyle, "professional");
+  const knowledge = str(body.knowledge);
+  const signature = str(body.signature);
+  const extraInstructions = str(body.extraInstructions);
 
-  // Optional strings
-  const optionalStrings = ["sourceUrl", "identity", "replyStyle", "knowledge", "signature", "extraInstructions"];
-  for (const field of optionalStrings) {
-    if (body[field] !== undefined && typeof body[field] !== "string") {
-      return jsonResponse({ error: `"${field}" must be a string if provided.` }, 400);
-    }
-  }
+  // threadMessages: accept array of strings, silently drop non-strings
+  const threadMessages: string[] = Array.isArray(body.threadMessages)
+    ? body.threadMessages.filter((m: unknown) => typeof m === "string").map((m: string) => m.trim()).filter(Boolean)
+    : [];
 
-  if (body.threadMessages !== undefined) {
-    if (!Array.isArray(body.threadMessages) || !body.threadMessages.every((m: unknown) => typeof m === "string")) {
-      return jsonResponse({ error: `"threadMessages" must be an array of strings.` }, 400);
-    }
+  // --- Must have SOME content to draft from ---
+  if (!latestMessage && threadMessages.length === 0) {
+    return jsonResponse({ error: "Not enough content: provide \"latestMessage\" or at least one non-empty entry in \"threadMessages\"." }, 400);
   }
-
-  const subject = (body.subject as string).trim();
-  const senderName = (body.senderName as string).trim();
-  const senderEmail = (body.senderEmail as string).trim();
-  const latestMessage = (body.latestMessage as string).trim();
-  const threadMessages = (body.threadMessages as string[] | undefined) ?? [];
-  const sourceUrl = ((body.sourceUrl as string) ?? "").trim();
-  const identity = ((body.identity as string) ?? "").trim();
-  const replyStyle = ((body.replyStyle as string) ?? "professional").trim();
-  const knowledge = ((body.knowledge as string) ?? "").trim();
-  const signature = ((body.signature as string) ?? "").trim();
-  const extraInstructions = ((body.extraInstructions as string) ?? "").trim();
 
   // --- Build prompt ---
   const threadContext =
     threadMessages.length > 0
       ? `\n\nPrevious messages in the thread (oldest first):\n${threadMessages.map((m, i) => `--- Message ${i + 1} ---\n${m}`).join("\n\n")}`
       : "";
+
+  const fromLine = senderName && senderEmail
+    ? `From: ${senderName} <${senderEmail}>`
+    : senderName ? `From: ${senderName}` : senderEmail ? `From: ${senderEmail}` : "";
 
   const identityBlock = identity ? `\nYou are replying as: ${identity}` : "";
   const knowledgeBlock = knowledge ? `\nRelevant background knowledge:\n${knowledge}` : "";
@@ -93,14 +85,10 @@ Rules:
 - If a signature is provided, append it naturally at the end after a blank line.${identityBlock}${styleBlock}${knowledgeBlock}${extraBlock}${signatureBlock}`;
 
   const userPrompt = `Email subject: ${subject}
-From: ${senderName} <${senderEmail}>${sourceUrl ? `\nSource: ${sourceUrl}` : ""}
-${threadContext}
-
-Latest message to reply to:
-${latestMessage}
+${fromLine ? fromLine + "\n" : ""}${sourceUrl ? `Source: ${sourceUrl}\n` : ""}${threadContext}
+${latestMessage ? `\nLatest message to reply to:\n${latestMessage}` : "\nDraft a reply based on the thread messages above."}
 
 Draft a reply now.`;
-
   // --- Call Anthropic ---
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) {
