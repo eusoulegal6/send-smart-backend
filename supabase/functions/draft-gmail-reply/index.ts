@@ -8,6 +8,24 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+// --- Truncation limits (characters) ---
+const LIMITS = {
+  subject: 300,
+  senderName: 200,
+  senderEmail: 320,
+  latestMessage: 12000,
+  threadMessage: 8000,
+  threadMaxCount: 10,
+  identity: 500,
+  replyStyle: 100,
+  knowledge: 4000,
+  signature: 1000,
+  extraInstructions: 2000,
+  sourceUrl: 2000,
+};
+
+const ANTHROPIC_TIMEOUT_MS = 30_000;
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -17,6 +35,24 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 
 function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v.trim() : fallback;
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+function cleanDraft(raw: string): string {
+  let text = raw.trim();
+  // Remove markdown code fences
+  text = text.replace(/^```[\s\S]*?\n([\s\S]*?)```$/gm, "$1").trim();
+  if (text.startsWith("```") && text.endsWith("```")) {
+    text = text.slice(3, -3).trim();
+  }
+  // Remove leading "Subject: ..." line
+  text = text.replace(/^Subject:\s*[^\n]*\n*/i, "").trim();
+  // Collapse runs of 3+ newlines
+  text = text.replace(/\n{3,}/g, "\n\n");
+  return text;
 }
 
 serve(async (req) => {
@@ -30,32 +66,44 @@ serve(async (req) => {
 
   const startTime = Date.now();
 
+  // --- Parse body ---
   let body: Record<string, unknown>;
   try {
-    body = await req.json();
+    const raw = await req.json();
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return jsonResponse({ error: "Invalid JSON body." }, 400);
+    }
+    body = raw as Record<string, unknown>;
   } catch {
     return jsonResponse({ error: "Invalid JSON body." }, 400);
   }
 
-  // --- Tolerant extraction with safe defaults ---
-  const subject = str(body.subject, "(No subject)");
-  const senderName = str(body.senderName);
-  const senderEmail = str(body.senderEmail);
-  const latestMessage = str(body.latestMessage);
-  const sourceUrl = str(body.sourceUrl);
-  const identity = str(body.identity);
-  const replyStyle = str(body.replyStyle, "professional");
-  const knowledge = str(body.knowledge);
-  const signature = str(body.signature);
-  const extraInstructions = str(body.extraInstructions);
+  // --- Extract & normalize ---
+  const subject = truncate(str(body.subject, "(No subject)"), LIMITS.subject);
+  const senderName = truncate(str(body.senderName), LIMITS.senderName);
+  const senderEmail = truncate(str(body.senderEmail), LIMITS.senderEmail);
+  const latestMessage = truncate(str(body.latestMessage), LIMITS.latestMessage);
+  const sourceUrl = truncate(str(body.sourceUrl), LIMITS.sourceUrl);
+  const identity = truncate(str(body.identity), LIMITS.identity);
+  const replyStyle = truncate(str(body.replyStyle, "professional"), LIMITS.replyStyle);
+  const knowledge = truncate(str(body.knowledge), LIMITS.knowledge);
+  const signature = truncate(str(body.signature), LIMITS.signature);
+  const extraInstructions = truncate(str(body.extraInstructions), LIMITS.extraInstructions);
 
-  // threadMessages: accept array of strings, silently drop non-strings
-  const threadMessages: string[] = Array.isArray(body.threadMessages)
-    ? body.threadMessages.filter((m: unknown) => typeof m === "string").map((m: string) => m.trim()).filter(Boolean)
-    : [];
+  const threadMessages: string[] = (
+    Array.isArray(body.threadMessages)
+      ? body.threadMessages
+          .filter((m: unknown) => typeof m === "string")
+          .map((m: string) => m.trim())
+          .filter(Boolean)
+          .slice(0, LIMITS.threadMaxCount)
+          .map((m: string) => truncate(m, LIMITS.threadMessage))
+      : []
+  );
 
-  // --- Must have SOME content to draft from ---
+  // --- Must have content ---
   if (!latestMessage && threadMessages.length === 0) {
+    console.log("Rejected: no content provided");
     return jsonResponse({ error: "Not enough content: provide \"latestMessage\" or at least one non-empty entry in \"threadMessages\"." }, 400);
   }
 
@@ -89,16 +137,21 @@ ${fromLine ? fromLine + "\n" : ""}${sourceUrl ? `Source: ${sourceUrl}\n` : ""}${
 ${latestMessage ? `\nLatest message to reply to:\n${latestMessage}` : "\nDraft a reply based on the thread messages above."}
 
 Draft a reply now.`;
+
   // --- Call Anthropic ---
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY is not configured");
+    console.error("Missing ANTHROPIC_API_KEY secret");
     return jsonResponse({ error: "Server configuration error." }, 500);
   }
 
   const model = "claude-sonnet-4-20250514";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
 
   try {
+    console.log(`Request: subject_len=${subject.length} latest_len=${latestMessage.length} thread_count=${threadMessages.length} style="${replyStyle}"`);
+
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -112,32 +165,42 @@ Draft a reply now.`;
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
+      signal: controller.signal,
     });
 
-    if (!anthropicRes.ok) {
-      const errBody = await anthropicRes.text();
-      console.error(`Anthropic API error status=${anthropicRes.status} body=${errBody}`);
+    clearTimeout(timeout);
 
-      if (anthropicRes.status === 429) {
-        return jsonResponse({ error: "Rate limited. Try again shortly." }, 429);
-      }
+    if (!anthropicRes.ok) {
+      const status = anthropicRes.status;
+      const errSnippet = (await anthropicRes.text()).slice(0, 200);
+      console.error(`Anthropic error status=${status} snippet=${errSnippet}`);
+
+      if (status === 429) return jsonResponse({ error: "Rate limited. Try again shortly." }, 429);
+      if (status === 401) return jsonResponse({ error: "Server configuration error." }, 500);
+      if (status >= 500) return jsonResponse({ error: "AI service temporarily unavailable." }, 502);
       return jsonResponse({ error: "AI generation failed." }, 502);
     }
 
     const anthropicData = await anthropicRes.json();
-    const draft = anthropicData.content?.[0]?.text ?? "";
+    const rawDraft = anthropicData.content?.[0]?.text ?? "";
+    const draft = cleanDraft(rawDraft);
 
     if (!draft) {
-      console.error("Anthropic returned empty content", JSON.stringify(anthropicData));
+      console.error(`Empty draft after cleanup, raw_len=${rawDraft.length} stop_reason=${anthropicData.stop_reason ?? "unknown"}`);
       return jsonResponse({ error: "AI returned an empty response." }, 502);
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`OK ${elapsed}ms subject="${subject}" sender="${senderEmail}" chars=${draft.length}`);
+    console.log(`OK ${elapsed}ms draft_len=${draft.length}`);
 
     return jsonResponse({ draft, model });
   } catch (err) {
-    console.error("Anthropic request failed:", err);
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      console.error(`Anthropic timeout after ${ANTHROPIC_TIMEOUT_MS}ms`);
+      return jsonResponse({ error: "AI request timed out. Try again." }, 504);
+    }
+    console.error("Anthropic request failed:", (err as Error).message);
     return jsonResponse({ error: "Failed to reach AI service." }, 502);
   }
 });
