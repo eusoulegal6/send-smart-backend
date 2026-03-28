@@ -29,7 +29,7 @@ const ANTHROPIC_TIMEOUT_MS = 30_000;
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }
 
@@ -57,7 +57,11 @@ function cleanDraft(raw: string): string {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: { ...corsHeaders, "Cache-Control": "no-store" } });
+  }
+
+  if (req.method === "GET") {
+    return jsonResponse({ ok: true, function: "draft-gmail-reply" });
   }
 
   if (req.method !== "POST") {
