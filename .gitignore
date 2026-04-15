@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+!ChromeExtensionAgent 2/dist/
+!ChromeExtensionAgent 2/dist/**
 
 # Editor directories and files
 .vscode/*
