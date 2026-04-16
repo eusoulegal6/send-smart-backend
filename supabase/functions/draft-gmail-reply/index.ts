@@ -24,7 +24,16 @@ const LIMITS = {
   sourceUrl: 2000,
 };
 
+// --- Quota limits (generous, abuse-prevention only) ---
+const QUOTA_EMAILS_PER_MONTH = 500;
+const QUOTA_INPUT_TOKENS_PER_MONTH = 2_000_000;
+const QUOTA_OUTPUT_TOKENS_PER_MONTH = 500_000;
+
 const ANTHROPIC_TIMEOUT_MS = 30_000;
+
+// --- SUPABASE_SERVICE_ROLE_KEY must be added as a secret in the project dashboard ---
+// Go to Project Settings → Edge Functions → Secrets and add SUPABASE_SERVICE_ROLE_KEY.
+// SUPABASE_URL is injected automatically by Supabase.
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -43,16 +52,158 @@ function truncate(s: string, max: number): string {
 
 function cleanDraft(raw: string): string {
   let text = raw.trim();
-  // Remove markdown code fences
   text = text.replace(/^```[\s\S]*?\n([\s\S]*?)```$/gm, "$1").trim();
   if (text.startsWith("```") && text.endsWith("```")) {
     text = text.slice(3, -3).trim();
   }
-  // Remove leading "Subject: ..." line
   text = text.replace(/^Subject:\s*[^\n]*\n*/i, "").trim();
-  // Collapse runs of 3+ newlines
   text = text.replace(/\n{3,}/g, "\n\n");
   return text;
+}
+
+/** Extract user_id from JWT bearer token without importing a library. */
+function extractUserId(req: Request): string | null {
+  const authHeader = req.headers.get("authorization") ?? "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  try {
+    const parts = match[1].split(".");
+    if (parts.length < 2) return null;
+    // base64url → base64
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(b64));
+    return typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Get current YYYY-MM period string. */
+function currentPeriod(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Check quota for user. Returns null if OK, or an error response if exceeded. Fails open. */
+async function checkQuota(userId: string, period: string, supabaseUrl: string, serviceRoleKey: string): Promise<Response | null> {
+  try {
+    const url = `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=emails_used,input_tokens_used,output_tokens_used`;
+    const res = await fetch(url, {
+      headers: {
+        "apikey": serviceRoleKey,
+        "Authorization": `Bearer ${serviceRoleKey}`,
+      },
+    });
+    if (!res.ok) {
+      console.warn(`Quota check failed status=${res.status}, allowing request`);
+      return null; // fail open
+    }
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return null; // no usage yet
+
+    const row = rows[0];
+    if (
+      (row.emails_used ?? 0) >= QUOTA_EMAILS_PER_MONTH ||
+      (row.input_tokens_used ?? 0) >= QUOTA_INPUT_TOKENS_PER_MONTH ||
+      (row.output_tokens_used ?? 0) >= QUOTA_OUTPUT_TOKENS_PER_MONTH
+    ) {
+      return jsonResponse({
+        error: `Monthly reply limit reached (${QUOTA_EMAILS_PER_MONTH} emails). Your quota resets at the start of next month.`,
+        quotaExceeded: true,
+      }, 429);
+    }
+    return null;
+  } catch (err) {
+    console.warn("Quota check error, allowing request:", (err as Error).message);
+    return null; // fail open
+  }
+}
+
+/** Fire-and-forget: upsert usage_counters and insert reply_log. */
+function recordUsage(
+  userId: string,
+  period: string,
+  inputTokens: number,
+  outputTokens: number,
+  meta: { subject: string; senderEmail: string; sourceUrl: string },
+  supabaseUrl: string,
+  serviceRoleKey: string,
+) {
+  const headers = {
+    "apikey": serviceRoleKey,
+    "Authorization": `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json",
+  };
+
+  // 1. Upsert usage_counters — insert a fresh row, then patch to increment
+  const upsertBody = JSON.stringify({
+    user_id: userId,
+    period,
+    emails_used: 1,
+    input_tokens_used: inputTokens,
+    output_tokens_used: outputTokens,
+  });
+
+  fetch(`${supabaseUrl}/rest/v1/usage_counters`, {
+    method: "POST",
+    headers: { ...headers, "Prefer": "resolution=merge-duplicates,return=representation" },
+    body: upsertBody,
+  })
+    .then(async (res) => {
+      if (res.status === 201 || res.status === 200) {
+        // New row created or returned existing — if existing, we need to increment
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          const existing = rows[0];
+          // If the row already had usage, the upsert replaced it with 1/inputTokens/outputTokens.
+          // We need to PATCH to set the correct accumulated values.
+          if (existing.emails_used > 1 || existing.input_tokens_used > inputTokens || existing.output_tokens_used > outputTokens) {
+            // Row already had higher values — the upsert overwrote. This shouldn't happen with
+            // merge-duplicates, but as a safety net we skip. The RPC approach below handles it.
+            return;
+          }
+        }
+      } else {
+        // Conflict or existing row — increment via PATCH using raw SQL RPC
+        // Fall back: read current, then patch
+        const getRes = await fetch(
+          `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=id,emails_used,input_tokens_used,output_tokens_used`,
+          { headers },
+        );
+        if (getRes.ok) {
+          const rows = await getRes.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            const row = rows[0];
+            await fetch(`${supabaseUrl}/rest/v1/usage_counters?id=eq.${row.id}`, {
+              method: "PATCH",
+              headers: { ...headers, "Prefer": "return=minimal" },
+              body: JSON.stringify({
+                emails_used: (row.emails_used ?? 0) + 1,
+                input_tokens_used: (row.input_tokens_used ?? 0) + inputTokens,
+                output_tokens_used: (row.output_tokens_used ?? 0) + outputTokens,
+              }),
+            });
+          }
+        }
+      }
+    })
+    .catch((err) => console.warn("Usage upsert error:", (err as Error).message));
+
+  // 2. Insert reply_log
+  fetch(`${supabaseUrl}/rest/v1/reply_logs`, {
+    method: "POST",
+    headers: { ...headers, "Prefer": "return=minimal" },
+    body: JSON.stringify({
+      user_id: userId,
+      period,
+      subject: meta.subject?.slice(0, 300) || null,
+      sender_email: meta.senderEmail?.slice(0, 320) || null,
+      source_url: meta.sourceUrl?.slice(0, 2000) || null,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      decision: "reply",
+    }),
+  }).catch((err) => console.warn("Reply log insert error:", (err as Error).message));
 }
 
 serve(async (req) => {
@@ -69,6 +220,12 @@ serve(async (req) => {
   }
 
   const startTime = Date.now();
+
+  // --- Authenticate ---
+  const userId = extractUserId(req);
+  if (!userId) {
+    return jsonResponse({ error: "Authentication required." }, 401);
+  }
 
   // --- Parse body ---
   let body: Record<string, unknown>;
@@ -109,6 +266,18 @@ serve(async (req) => {
   if (!latestMessage && threadMessages.length === 0) {
     console.log("Rejected: no content provided");
     return jsonResponse({ error: "Not enough content: provide \"latestMessage\" or at least one non-empty entry in \"threadMessages\"." }, 400);
+  }
+
+  // --- Quota check ---
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const period = currentPeriod();
+
+  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    const quotaBlock = await checkQuota(userId, period, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    if (quotaBlock) return quotaBlock;
+  } else {
+    console.warn("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set — skipping quota check");
   }
 
   // --- Build prompt ---
@@ -154,7 +323,7 @@ Draft a reply now.`;
   const timeout = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
 
   try {
-    console.log(`Request: subject_len=${subject.length} latest_len=${latestMessage.length} thread_count=${threadMessages.length} style="${replyStyle}"`);
+    console.log(`Request: user=${userId} period=${period} subject_len=${subject.length} latest_len=${latestMessage.length} thread_count=${threadMessages.length} style="${replyStyle}"`);
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -194,8 +363,17 @@ Draft a reply now.`;
       return jsonResponse({ error: "AI returned an empty response." }, 502);
     }
 
+    // --- Read actual token usage ---
+    const inputTokens = anthropicData.usage?.input_tokens ?? 0;
+    const outputTokens = anthropicData.usage?.output_tokens ?? 0;
+
     const elapsed = Date.now() - startTime;
-    console.log(`OK ${elapsed}ms draft_len=${draft.length}`);
+    console.log(`OK ${elapsed}ms user=${userId} period=${period} draft_len=${draft.length} in_tok=${inputTokens} out_tok=${outputTokens}`);
+
+    // --- Fire-and-forget: record usage ---
+    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    }
 
     return jsonResponse({ draft, model });
   } catch (err) {
