@@ -1,6 +1,7 @@
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import ConnectExtension from "@/components/ConnectExtension";
 
 const Dashboard = () => {
   const { user } = useAuthReady();
@@ -28,6 +29,7 @@ const Dashboard = () => {
             Welcome{user?.email ? `, ${user.email}` : ""}! You are signed in.
           </p>
         </div>
+        <ConnectExtension />
       </div>
     </div>
   );
