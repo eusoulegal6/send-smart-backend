@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.pair-redeem]
 verify_jwt = false
+
+[functions.usage-get]
+verify_jwt = false
