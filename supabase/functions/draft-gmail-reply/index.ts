@@ -280,8 +280,14 @@ serve(async (req) => {
 
   const startTime = Date.now();
 
-  // --- Authenticate ---
-  const userId = extractUserId(req);
+  // --- Authenticate (supports Supabase JWT or `ext_` extension token) ---
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    return jsonResponse({ error: "Server configuration error." }, 500);
+  }
+  const userId = await resolveUserId(req, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   if (!userId) {
     return jsonResponse({ error: "Authentication required." }, 401);
   }
@@ -328,16 +334,9 @@ serve(async (req) => {
   }
 
   // --- Quota check ---
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const period = currentPeriod();
-
-  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-    const quotaBlock = await checkQuota(userId, period, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    if (quotaBlock) return quotaBlock;
-  } else {
-    console.warn("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set — skipping quota check");
-  }
+  const quotaBlock = await checkQuota(userId, period, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  if (quotaBlock) return quotaBlock;
 
   // --- Build prompt ---
   const threadContext =
