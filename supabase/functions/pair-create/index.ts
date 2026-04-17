@@ -137,9 +137,9 @@ serve(async (req) => {
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   });
-  const { data: claimsData } = await userClient.auth.getClaims(token);
-  if (claimsData?.claims?.sub) {
-    userId = claimsData.claims.sub as string;
+  const { data: userData } = await userClient.auth.getUser(token);
+  if (userData?.user?.id) {
+    userId = userData.user.id;
   }
 
   // 2) Fall back to trusted partner JWT (e.g. Smart Reply Hub)
