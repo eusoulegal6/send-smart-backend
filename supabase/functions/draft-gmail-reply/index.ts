@@ -62,20 +62,79 @@ function cleanDraft(raw: string): string {
 }
 
 /** Extract user_id from JWT bearer token without importing a library. */
-function extractUserId(req: Request): string | null {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
+function extractUserIdFromJwt(token: string): string | null {
   try {
-    const parts = match[1].split(".");
+    const parts = token.split(".");
     if (parts.length < 2) return null;
-    // base64url → base64
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const payload = JSON.parse(atob(b64));
     return typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : null;
   } catch {
     return null;
   }
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Resolves the user_id from the Authorization header.
+ * Supports two token types:
+ *  - Standard Supabase JWT: `Bearer <jwt>`
+ *  - Extension pairing token: `Bearer ext_<token>` (validated against extension_tokens table)
+ */
+async function resolveUserId(
+  req: Request,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<string | null> {
+  const authHeader = req.headers.get("authorization") ?? "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1];
+
+  // Extension token path
+  if (token.startsWith("ext_")) {
+    const raw = token.slice(4);
+    if (!raw) return null;
+    try {
+      const tokenHash = await sha256Hex(raw);
+      const url = `${supabaseUrl}/rest/v1/extension_tokens?token_hash=eq.${tokenHash}&revoked_at=is.null&select=id,user_id`;
+      const res = await fetch(url, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      if (!res.ok) {
+        console.warn(`Extension token lookup failed status=${res.status}`);
+        return null;
+      }
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      const row = rows[0];
+      // Fire-and-forget last_used_at update
+      fetch(`${supabaseUrl}/rest/v1/extension_tokens?id=eq.${row.id}`, {
+        method: "PATCH",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+      }).catch((e) => console.warn("last_used_at update failed:", (e as Error).message));
+      return row.user_id ?? null;
+    } catch (e) {
+      console.warn("Extension token validation error:", (e as Error).message);
+      return null;
+    }
+  }
+
+  // Standard Supabase JWT path
+  return extractUserIdFromJwt(token);
 }
 
 /** Get current YYYY-MM period string. */
