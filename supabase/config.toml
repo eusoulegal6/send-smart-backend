@@ -1,1 +1,10 @@
 project_id = "uexdjvbdqwrzlgfrpgbl"
+
+[functions.draft-gmail-reply]
+verify_jwt = false
+
+[functions.pair-create]
+verify_jwt = false
+
+[functions.pair-redeem]
+verify_jwt = false
