@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { jwtVerify, createRemoteJWKSet } from "https://esm.sh/jose@5.9.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,22 @@ const corsHeaders = {
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no O/0/I/1
 const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_ACTIVE_CODES = 5;
+
+// Trusted partner Supabase projects whose JWTs we accept.
+// Users from these projects get an auto-provisioned Send Smart user on first use.
+const PARTNER_PROJECTS: Array<{ ref: string; url: string }> = [
+  { ref: "uxhtrpwgfqknxqzhssoe", url: "https://uxhtrpwgfqknxqzhssoe.supabase.co" }, // Smart Reply Hub
+];
+
+const partnerJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+function getPartnerJwks(url: string) {
+  let jwks = partnerJwks.get(url);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(`${url}/auth/v1/.well-known/jwks.json`));
+    partnerJwks.set(url, jwks);
+  }
+  return jwks;
+}
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -26,6 +43,73 @@ function generateCode(): string {
   let s = "";
   for (let i = 0; i < 8; i++) s += ALPHABET[bytes[i] % ALPHABET.length];
   return `${s.slice(0, 4)}-${s.slice(4)}`;
+}
+
+type AdminClient = ReturnType<typeof createClient>;
+
+/**
+ * Try to verify the JWT against any trusted partner project.
+ * Returns { partnerRef, sub, email } on success, or null.
+ */
+async function tryPartnerVerify(token: string): Promise<
+  { partnerRef: string; sub: string; email: string | null } | null
+> {
+  for (const partner of PARTNER_PROJECTS) {
+    try {
+      const { payload } = await jwtVerify(token, getPartnerJwks(partner.url), {
+        issuer: `${partner.url}/auth/v1`,
+      });
+      const sub = typeof payload.sub === "string" ? payload.sub : null;
+      if (!sub) continue;
+      const email = typeof payload.email === "string" ? payload.email : null;
+      return { partnerRef: partner.ref, sub, email };
+    } catch (_) {
+      // Try next partner / fall through
+    }
+  }
+  return null;
+}
+
+/**
+ * Map a partner user to a deterministic Send Smart user, creating it if needed.
+ * We key by email "partner+<ref>+<sub>@bridge.sendsmart.local" so the mapping
+ * is stable and unique per partner user, even if their real email changes.
+ */
+async function resolvePartnerUserId(
+  admin: AdminClient,
+  partnerRef: string,
+  sub: string,
+): Promise<string | null> {
+  const bridgeEmail = `partner+${partnerRef}+${sub}@bridge.sendsmart.local`;
+
+  // Try to create. If it already exists, list & find.
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email: bridgeEmail,
+    email_confirm: true,
+    user_metadata: { partner_ref: partnerRef, partner_sub: sub, bridge: true },
+  });
+  if (created?.user?.id) return created.user.id;
+
+  // If user already exists, look it up by email via listUsers (paged).
+  const msg = String(createErr?.message ?? "").toLowerCase();
+  if (createErr && !msg.includes("already") && !msg.includes("registered") && !msg.includes("exists")) {
+    console.error("pair-create partner createUser error:", createErr.message);
+    return null;
+  }
+
+  // Search for existing bridge user
+  // listUsers supports email filter via query param in newer SDKs; fall back to scanning first page.
+  // deno-lint-ignore no-explicit-any
+  const { data: list, error: listErr } = await (admin.auth.admin as any).listUsers({
+    page: 1,
+    perPage: 200,
+  });
+  if (listErr) {
+    console.error("pair-create partner listUsers error:", listErr.message);
+    return null;
+  }
+  const found = list?.users?.find((u: { email?: string | null }) => u.email === bridgeEmail);
+  return found?.id ?? null;
 }
 
 serve(async (req) => {
@@ -44,18 +128,34 @@ serve(async (req) => {
   if (!authHeader?.startsWith("Bearer ")) {
     return jsonResponse({ error: "Authentication required." }, 401);
   }
+  const token = authHeader.replace("Bearer ", "");
 
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // 1) Try local Send Smart auth
+  let userId: string | null = null;
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   });
-  const token = authHeader.replace("Bearer ", "");
-  const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
-  if (claimsErr || !claimsData?.claims?.sub) {
+  const { data: claimsData } = await userClient.auth.getClaims(token);
+  if (claimsData?.claims?.sub) {
+    userId = claimsData.claims.sub as string;
+  }
+
+  // 2) Fall back to trusted partner JWT (e.g. Smart Reply Hub)
+  if (!userId) {
+    const partner = await tryPartnerVerify(token);
+    if (partner) {
+      userId = await resolvePartnerUserId(admin, partner.partnerRef, partner.sub);
+      if (!userId) {
+        return jsonResponse({ error: "Failed to provision partner user." }, 500);
+      }
+    }
+  }
+
+  if (!userId) {
     return jsonResponse({ error: "Invalid session." }, 401);
   }
-  const userId = claimsData.claims.sub as string;
-
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // Rate limit: max N active (unconsumed, unexpired) codes per user
   const nowIso = new Date().toISOString();
