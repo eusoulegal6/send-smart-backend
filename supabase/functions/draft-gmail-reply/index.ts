@@ -443,7 +443,7 @@ Draft a reply now.`;
 
     // --- Fire-and-forget: record usage ---
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl, decision: "reply" }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
 
     return jsonResponse({ draft, model });
