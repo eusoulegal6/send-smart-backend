@@ -329,14 +329,25 @@ serve(async (req) => {
       : []
   );
 
-  // --- Must have content ---
+  // --- Decision: log-only path (no AI call) for "review" or "skip" ---
+  const decisionRaw = str(body.decision, "reply").toLowerCase();
+  const decision = ["reply", "review", "skip"].includes(decisionRaw) ? decisionRaw : "reply";
+  const period = currentPeriod();
+
+  if (decision !== "reply") {
+    // Log-only: extension is reporting a flagged/skipped email. No AI, no quota check.
+    console.log(`Log-only: user=${userId} decision=${decision} subject_len=${subject.length}`);
+    recordUsage(userId, period, 0, 0, { subject, senderEmail, sourceUrl, decision }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    return jsonResponse({ ok: true, logged: true, decision });
+  }
+
+  // --- Must have content (only required for actual reply generation) ---
   if (!latestMessage && threadMessages.length === 0) {
     console.log("Rejected: no content provided");
     return jsonResponse({ error: "Not enough content: provide \"latestMessage\" or at least one non-empty entry in \"threadMessages\"." }, 400);
   }
 
   // --- Quota check ---
-  const period = currentPeriod();
   const quotaBlock = await checkQuota(userId, period, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   if (quotaBlock) return quotaBlock;
 
