@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.review-list]
 verify_jwt = false
+
+[functions.review-resolve]
+verify_jwt = false
