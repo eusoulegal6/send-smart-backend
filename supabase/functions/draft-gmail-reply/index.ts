@@ -184,21 +184,23 @@ function recordUsage(
   period: string,
   inputTokens: number,
   outputTokens: number,
-  meta: { subject: string; senderEmail: string; sourceUrl: string },
+  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string },
   supabaseUrl: string,
   serviceRoleKey: string,
 ) {
+  const decision = meta.decision || "reply";
   const headers = {
     "apikey": serviceRoleKey,
     "Authorization": `Bearer ${serviceRoleKey}`,
     "Content-Type": "application/json",
   };
 
-  // 1. Upsert usage_counters — insert a fresh row, then patch to increment
+  // 1. Upsert usage_counters — only count actual replies toward email quota
+  const isReply = decision === "reply";
   const upsertBody = JSON.stringify({
     user_id: userId,
     period,
-    emails_used: 1,
+    emails_used: isReply ? 1 : 0,
     input_tokens_used: inputTokens,
     output_tokens_used: outputTokens,
   });
@@ -216,7 +218,7 @@ function recordUsage(
           const existing = rows[0];
           // If the row already had usage, the upsert replaced it with 1/inputTokens/outputTokens.
           // We need to PATCH to set the correct accumulated values.
-          if (existing.emails_used > 1 || existing.input_tokens_used > inputTokens || existing.output_tokens_used > outputTokens) {
+          if (existing.emails_used > (isReply ? 1 : 0) || existing.input_tokens_used > inputTokens || existing.output_tokens_used > outputTokens) {
             // Row already had higher values — the upsert overwrote. This shouldn't happen with
             // merge-duplicates, but as a safety net we skip. The RPC approach below handles it.
             return;
@@ -237,7 +239,7 @@ function recordUsage(
               method: "PATCH",
               headers: { ...headers, "Prefer": "return=minimal" },
               body: JSON.stringify({
-                emails_used: (row.emails_used ?? 0) + 1,
+                emails_used: (row.emails_used ?? 0) + (isReply ? 1 : 0),
                 input_tokens_used: (row.input_tokens_used ?? 0) + inputTokens,
                 output_tokens_used: (row.output_tokens_used ?? 0) + outputTokens,
               }),
@@ -260,7 +262,7 @@ function recordUsage(
       source_url: meta.sourceUrl?.slice(0, 2000) || null,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      decision: "reply",
+      decision,
     }),
   }).catch((err) => console.warn("Reply log insert error:", (err as Error).message));
 }
@@ -327,14 +329,25 @@ serve(async (req) => {
       : []
   );
 
-  // --- Must have content ---
+  // --- Decision: log-only path (no AI call) for "review" or "skip" ---
+  const decisionRaw = str(body.decision, "reply").toLowerCase();
+  const decision = ["reply", "review", "skip"].includes(decisionRaw) ? decisionRaw : "reply";
+  const period = currentPeriod();
+
+  if (decision !== "reply") {
+    // Log-only: extension is reporting a flagged/skipped email. No AI, no quota check.
+    console.log(`Log-only: user=${userId} decision=${decision} subject_len=${subject.length}`);
+    recordUsage(userId, period, 0, 0, { subject, senderEmail, sourceUrl, decision }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    return jsonResponse({ ok: true, logged: true, decision });
+  }
+
+  // --- Must have content (only required for actual reply generation) ---
   if (!latestMessage && threadMessages.length === 0) {
     console.log("Rejected: no content provided");
     return jsonResponse({ error: "Not enough content: provide \"latestMessage\" or at least one non-empty entry in \"threadMessages\"." }, 400);
   }
 
   // --- Quota check ---
-  const period = currentPeriod();
   const quotaBlock = await checkQuota(userId, period, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   if (quotaBlock) return quotaBlock;
 
@@ -430,7 +443,7 @@ Draft a reply now.`;
 
     // --- Fire-and-forget: record usage ---
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl, decision: "reply" }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
 
     return jsonResponse({ draft, model });
