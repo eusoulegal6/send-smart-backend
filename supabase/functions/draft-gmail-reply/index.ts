@@ -218,7 +218,7 @@ function recordUsage(
           const existing = rows[0];
           // If the row already had usage, the upsert replaced it with 1/inputTokens/outputTokens.
           // We need to PATCH to set the correct accumulated values.
-          if (existing.emails_used > 1 || existing.input_tokens_used > inputTokens || existing.output_tokens_used > outputTokens) {
+          if (existing.emails_used > (isReply ? 1 : 0) || existing.input_tokens_used > inputTokens || existing.output_tokens_used > outputTokens) {
             // Row already had higher values — the upsert overwrote. This shouldn't happen with
             // merge-duplicates, but as a safety net we skip. The RPC approach below handles it.
             return;
@@ -239,7 +239,7 @@ function recordUsage(
               method: "PATCH",
               headers: { ...headers, "Prefer": "return=minimal" },
               body: JSON.stringify({
-                emails_used: (row.emails_used ?? 0) + 1,
+                emails_used: (row.emails_used ?? 0) + (isReply ? 1 : 0),
                 input_tokens_used: (row.input_tokens_used ?? 0) + inputTokens,
                 output_tokens_used: (row.output_tokens_used ?? 0) + outputTokens,
               }),
