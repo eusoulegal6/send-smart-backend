@@ -195,11 +195,12 @@ function recordUsage(
     "Content-Type": "application/json",
   };
 
-  // 1. Upsert usage_counters — insert a fresh row, then patch to increment
+  // 1. Upsert usage_counters — only count actual replies toward email quota
+  const isReply = decision === "reply";
   const upsertBody = JSON.stringify({
     user_id: userId,
     period,
-    emails_used: 1,
+    emails_used: isReply ? 1 : 0,
     input_tokens_used: inputTokens,
     output_tokens_used: outputTokens,
   });
