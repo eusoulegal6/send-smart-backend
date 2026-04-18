@@ -262,7 +262,7 @@ function recordUsage(
       source_url: meta.sourceUrl?.slice(0, 2000) || null,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      decision: "reply",
+      decision,
     }),
   }).catch((err) => console.warn("Reply log insert error:", (err as Error).message));
 }
