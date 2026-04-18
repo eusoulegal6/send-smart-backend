@@ -184,10 +184,11 @@ function recordUsage(
   period: string,
   inputTokens: number,
   outputTokens: number,
-  meta: { subject: string; senderEmail: string; sourceUrl: string },
+  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string },
   supabaseUrl: string,
   serviceRoleKey: string,
 ) {
+  const decision = meta.decision || "reply";
   const headers = {
     "apikey": serviceRoleKey,
     "Authorization": `Bearer ${serviceRoleKey}`,
