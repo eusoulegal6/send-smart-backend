@@ -2,10 +2,13 @@ import { useAuthReady } from "@/hooks/useAuthReady";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import ConnectExtension from "@/components/ConnectExtension";
+import TrafficAnalytics from "@/components/TrafficAnalytics";
+import { usePageviewTracking } from "@/hooks/usePageviewTracking";
 
 const Dashboard = () => {
   const { user } = useAuthReady();
   const navigate = useNavigate();
+  usePageviewTracking("apps-backend");
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -51,6 +54,11 @@ const Dashboard = () => {
               Connect WhatsReply
             </button>
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">Analytics</h2>
+          <TrafficAnalytics />
         </section>
       </div>
     </div>

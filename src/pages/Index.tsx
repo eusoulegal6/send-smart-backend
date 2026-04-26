@@ -1,8 +1,10 @@
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { Navigate } from "react-router-dom";
+import { usePageviewTracking } from "@/hooks/usePageviewTracking";
 
 const Index = () => {
   const { user, isReady } = useAuthReady();
+  usePageviewTracking("apps-backend");
 
   if (!isReady) {
     return (
