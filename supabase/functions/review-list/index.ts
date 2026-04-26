@@ -33,7 +33,8 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-type AdminClient = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type AdminClient = any;
 
 async function tryPartnerVerify(token: string): Promise<
   { partnerRef: string; sub: string } | null

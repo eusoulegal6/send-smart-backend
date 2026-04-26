@@ -45,7 +45,8 @@ function generateCode(): string {
   return `${s.slice(0, 4)}-${s.slice(4)}`;
 }
 
-type AdminClient = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type AdminClient = any;
 
 /**
  * Try to verify the JWT against any trusted partner project.

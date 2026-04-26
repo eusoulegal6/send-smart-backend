@@ -32,6 +32,12 @@ const Index = () => {
               AI-powered email reply drafting for Gmail, with review and auto-send modes.
             </p>
           </div>
+          <a href="#" className="rounded-lg border border-border bg-card p-4 hover:border-primary transition-colors">
+            <h2 className="font-semibold text-card-foreground">WhatsReply</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              AI-assisted replies for WhatsApp conversations, with the same account and dashboard.
+            </p>
+          </a>
           <div className="rounded-lg border border-border bg-card p-4 opacity-70">
             <h2 className="font-semibold text-card-foreground">More coming soon</h2>
             <p className="text-sm text-muted-foreground mt-1">
