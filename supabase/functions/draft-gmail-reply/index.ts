@@ -206,7 +206,7 @@ function recordUsage(
     output_tokens_used: outputTokens,
   });
 
-  fetch(`${supabaseUrl}/rest/v1/usage_counters`, {
+  fetch(`${supabaseUrl}/rest/v1/usage_counters?on_conflict=user_id,app_key,period`, {
     method: "POST",
     headers: { ...headers, "Prefer": "resolution=merge-duplicates,return=representation" },
     body: upsertBody,
