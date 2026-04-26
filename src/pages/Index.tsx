@@ -18,13 +18,30 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center space-y-4 max-w-md px-4">
-        <h1 className="text-3xl font-bold text-foreground">Send Smart</h1>
-        <p className="text-muted-foreground">
-          AI-powered email reply drafting for Gmail. Sign up or log in to get started.
+      <div className="text-center space-y-6 max-w-2xl px-4">
+        <h1 className="text-4xl font-bold text-foreground">Apps Backend</h1>
+        <p className="text-lg text-muted-foreground">
+          A shared backend powering multiple products — authentication, settings,
+          usage, and AI-assisted features in one place.
         </p>
-        <p className="text-sm text-muted-foreground">
-          Check your email for a confirmation link after signing up.
+
+        <div className="grid gap-4 sm:grid-cols-2 text-left pt-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h2 className="font-semibold text-card-foreground">Send Smart</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              AI-powered email reply drafting for Gmail, with review and auto-send modes.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4 opacity-70">
+            <h2 className="font-semibold text-card-foreground">More coming soon</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Additional products will plug into the same account and dashboard.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground pt-2">
+          Sign up or log in to access your dashboard.
         </p>
       </div>
     </div>

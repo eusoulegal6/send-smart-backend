@@ -16,7 +16,10 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Apps Backend</h1>
+            <p className="text-sm text-muted-foreground">Dashboard</p>
+          </div>
           <button
             onClick={handleSignOut}
             className="px-4 py-2 rounded-md bg-secondary text-secondary-foreground text-sm hover:opacity-90"
