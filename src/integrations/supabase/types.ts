@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_apps: {
+        Row: {
+          app_key: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          app_key: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          app_key?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      app_admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           app_key: string
@@ -217,7 +253,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_app_admin: { Args: { _user_id: string }; Returns: boolean }
+      user_has_app: {
+        Args: { _app_key: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

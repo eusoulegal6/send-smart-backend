@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { registerForApp, isMemberOfApp } from "@/lib/accountApp";
 
 const AuthCallback = () => {
   const navigate = useNavigate();
@@ -9,12 +10,27 @@ const AuthCallback = () => {
   useEffect(() => {
     const hash = window.location.hash;
 
-    // If there are tokens in the hash, Supabase client picks them up via getSession
-    supabase.auth.getSession().then(({ data: { session }, error: err }) => {
-      // Clean the URL fragment
-      if (hash) {
-        window.history.replaceState(null, "", window.location.pathname);
+    const finalize = async () => {
+      const pendingApp = sessionStorage.getItem("__pending_app_register");
+      sessionStorage.removeItem("__pending_app_register");
+
+      if (pendingApp) {
+        try { await registerForApp(pendingApp); } catch (e) { console.warn(e); }
+        navigate("/dashboard", { replace: true });
+        return;
       }
+
+      const member = await isMemberOfApp("apps-backend");
+      if (!member) {
+        await supabase.auth.signOut();
+        setError("This Google account isn't registered on the Apps Backend hub. Sign up here first.");
+        return;
+      }
+      navigate("/dashboard", { replace: true });
+    };
+
+    supabase.auth.getSession().then(({ data: { session }, error: err }) => {
+      if (hash) window.history.replaceState(null, "", window.location.pathname);
 
       if (err) {
         console.error("Auth callback error:", err.message);
@@ -23,26 +39,17 @@ const AuthCallback = () => {
       }
 
       if (session) {
-        navigate("/dashboard", { replace: true });
+        finalize();
       } else {
-        // No session yet — might still be processing; wait for auth state change
-        const timeout = setTimeout(() => {
-          // If still no session after 5s, redirect to login
-          navigate("/", { replace: true });
-        }, 5000);
-
+        const timeout = setTimeout(() => navigate("/auth", { replace: true }), 5000);
         const {
           data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, newSession) => {
           clearTimeout(timeout);
           subscription.unsubscribe();
-          if (newSession) {
-            navigate("/dashboard", { replace: true });
-          } else {
-            navigate("/", { replace: true });
-          }
+          if (newSession) finalize();
+          else navigate("/auth", { replace: true });
         });
-
         return () => {
           clearTimeout(timeout);
           subscription.unsubscribe();
