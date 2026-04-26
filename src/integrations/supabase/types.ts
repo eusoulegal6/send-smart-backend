@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          app_key: string
+          created_at: string
+          id: string
+          settings: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          app_key: string
+          created_at?: string
+          id?: string
+          settings?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          app_key?: string
+          created_at?: string
+          id?: string
+          settings?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       extension_pair_codes: {
         Row: {
           code: string
@@ -112,6 +139,7 @@ export type Database = {
       }
       usage_counters: {
         Row: {
+          app_key: string
           created_at: string
           emails_used: number
           id: string
@@ -122,6 +150,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          app_key?: string
           created_at?: string
           emails_used?: number
           id?: string
@@ -132,6 +161,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          app_key?: string
           created_at?: string
           emails_used?: number
           id?: string
