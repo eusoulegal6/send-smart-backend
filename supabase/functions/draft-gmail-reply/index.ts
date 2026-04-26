@@ -229,7 +229,7 @@ function recordUsage(
         // Conflict or existing row — increment via PATCH using raw SQL RPC
         // Fall back: read current, then patch
         const getRes = await fetch(
-          `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=id,emails_used,input_tokens_used,output_tokens_used`,
+          `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&app_key=eq.send-smart&period=eq.${period}&select=id,emails_used,input_tokens_used,output_tokens_used`,
           { headers },
         );
         if (getRes.ok) {
