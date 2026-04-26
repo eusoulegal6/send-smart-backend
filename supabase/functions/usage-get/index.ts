@@ -44,7 +44,8 @@ function currentPeriod(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-type AdminClient = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type AdminClient = any;
 
 async function tryPartnerVerify(token: string): Promise<
   { partnerRef: string; sub: string } | null
