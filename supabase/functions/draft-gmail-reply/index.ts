@@ -199,6 +199,7 @@ function recordUsage(
   const isReply = decision === "reply";
   const upsertBody = JSON.stringify({
     user_id: userId,
+    app_key: "send-smart",
     period,
     emails_used: isReply ? 1 : 0,
     input_tokens_used: inputTokens,
