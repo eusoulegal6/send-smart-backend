@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.review-resolve]
 verify_jwt = false
+
+[functions.whatsreply-action]
+verify_jwt = false
