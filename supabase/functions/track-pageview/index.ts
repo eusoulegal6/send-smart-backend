@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-const ALLOWED_APPS = new Set(["send-smart", "whatsreply"]);
+const ALLOWED_APPS = new Set(["send-smart", "whatsreply", "apps-backend"]);
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
