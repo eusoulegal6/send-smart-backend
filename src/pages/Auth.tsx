@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { toast } from "@/hooks/use-toast";
 
@@ -49,13 +50,16 @@ const Auth = () => {
   };
 
   const handleGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: `${window.location.origin}/auth/callback`,
     });
-    if (error) {
-      toast({ title: "Google sign-in failed", description: error.message, variant: "destructive" });
+    if (result.error) {
+      const message = result.error instanceof Error ? result.error.message : "Google sign-in failed";
+      toast({ title: "Google sign-in failed", description: message, variant: "destructive" });
+      return;
     }
+    if (result.redirected) return;
+    navigate("/dashboard", { replace: true });
   };
 
   return (
