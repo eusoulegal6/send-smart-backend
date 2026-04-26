@@ -48,9 +48,14 @@ const Index = () => {
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground pt-2">
-          Sign up or log in to access your dashboard.
-        </p>
+        <div className="pt-2">
+          <a
+            href="/auth"
+            className="inline-block rounded-md bg-primary text-primary-foreground px-6 py-2.5 text-sm font-medium hover:opacity-90"
+          >
+            Sign in / Sign up
+          </a>
+        </div>
       </div>
     </div>
   );
