@@ -146,7 +146,7 @@ function currentPeriod(): string {
 /** Check quota for user. Returns null if OK, or an error response if exceeded. Fails open. */
 async function checkQuota(userId: string, period: string, supabaseUrl: string, serviceRoleKey: string): Promise<Response | null> {
   try {
-    const url = `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=emails_used,input_tokens_used,output_tokens_used`;
+    const url = `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&app_key=eq.send-smart&period=eq.${period}&select=emails_used,input_tokens_used,output_tokens_used`;
     const res = await fetch(url, {
       headers: {
         "apikey": serviceRoleKey,
