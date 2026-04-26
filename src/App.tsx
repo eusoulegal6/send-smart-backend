@@ -7,7 +7,6 @@ import { useAuthReady } from "@/hooks/useAuthReady";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AuthCallback from "./pages/AuthCallback";
-import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +23,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -38,7 +37,6 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route
             path="/dashboard"

@@ -146,7 +146,7 @@ function currentPeriod(): string {
 /** Check quota for user. Returns null if OK, or an error response if exceeded. Fails open. */
 async function checkQuota(userId: string, period: string, supabaseUrl: string, serviceRoleKey: string): Promise<Response | null> {
   try {
-    const url = `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&app_key=eq.send-smart&period=eq.${period}&select=emails_used,input_tokens_used,output_tokens_used`;
+    const url = `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=emails_used,input_tokens_used,output_tokens_used`;
     const res = await fetch(url, {
       headers: {
         "apikey": serviceRoleKey,
@@ -199,14 +199,13 @@ function recordUsage(
   const isReply = decision === "reply";
   const upsertBody = JSON.stringify({
     user_id: userId,
-    app_key: "send-smart",
     period,
     emails_used: isReply ? 1 : 0,
     input_tokens_used: inputTokens,
     output_tokens_used: outputTokens,
   });
 
-  fetch(`${supabaseUrl}/rest/v1/usage_counters?on_conflict=user_id,app_key,period`, {
+  fetch(`${supabaseUrl}/rest/v1/usage_counters`, {
     method: "POST",
     headers: { ...headers, "Prefer": "resolution=merge-duplicates,return=representation" },
     body: upsertBody,
@@ -229,7 +228,7 @@ function recordUsage(
         // Conflict or existing row — increment via PATCH using raw SQL RPC
         // Fall back: read current, then patch
         const getRes = await fetch(
-          `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&app_key=eq.send-smart&period=eq.${period}&select=id,emails_used,input_tokens_used,output_tokens_used`,
+          `${supabaseUrl}/rest/v1/usage_counters?user_id=eq.${userId}&period=eq.${period}&select=id,emails_used,input_tokens_used,output_tokens_used`,
           { headers },
         );
         if (getRes.ok) {

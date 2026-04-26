@@ -44,8 +44,7 @@ function currentPeriod(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-// deno-lint-ignore no-explicit-any
-type AdminClient = any;
+type AdminClient = ReturnType<typeof createClient>;
 
 async function tryPartnerVerify(token: string): Promise<
   { partnerRef: string; sub: string } | null
@@ -151,7 +150,6 @@ serve(async (req) => {
       .from("usage_counters")
       .select("emails_used,input_tokens_used,output_tokens_used")
       .eq("user_id", userId)
-      .eq("app_key", "send-smart")
       .eq("period", period)
       .maybeSingle(),
     admin

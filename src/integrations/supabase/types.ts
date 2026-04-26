@@ -14,69 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      account_apps: {
-        Row: {
-          app_key: string
-          created_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          app_key: string
-          created_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          app_key?: string
-          created_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      app_admins: {
-        Row: {
-          created_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      app_settings: {
-        Row: {
-          app_key: string
-          created_at: string
-          id: string
-          settings: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          app_key: string
-          created_at?: string
-          id?: string
-          settings?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          app_key?: string
-          created_at?: string
-          id?: string
-          settings?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       extension_pair_codes: {
         Row: {
           code: string
@@ -134,45 +71,6 @@ export type Database = {
         }
         Relationships: []
       }
-      pageviews: {
-        Row: {
-          app_key: string
-          country: string | null
-          created_at: string
-          id: string
-          path: string
-          referrer: string | null
-          session_id: string
-          user_agent: string | null
-          user_id: string | null
-          visitor_id: string
-        }
-        Insert: {
-          app_key: string
-          country?: string | null
-          created_at?: string
-          id?: string
-          path: string
-          referrer?: string | null
-          session_id: string
-          user_agent?: string | null
-          user_id?: string | null
-          visitor_id: string
-        }
-        Update: {
-          app_key?: string
-          country?: string | null
-          created_at?: string
-          id?: string
-          path?: string
-          referrer?: string | null
-          session_id?: string
-          user_agent?: string | null
-          user_id?: string | null
-          visitor_id?: string
-        }
-        Relationships: []
-      }
       reply_logs: {
         Row: {
           created_at: string
@@ -214,7 +112,6 @@ export type Database = {
       }
       usage_counters: {
         Row: {
-          app_key: string
           created_at: string
           emails_used: number
           id: string
@@ -225,7 +122,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          app_key?: string
           created_at?: string
           emails_used?: number
           id?: string
@@ -236,7 +132,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          app_key?: string
           created_at?: string
           emails_used?: number
           id?: string
@@ -253,11 +148,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      is_app_admin: { Args: { _user_id: string }; Returns: boolean }
-      user_has_app: {
-        Args: { _app_key: string; _user_id: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

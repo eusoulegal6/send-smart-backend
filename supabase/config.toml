@@ -17,12 +17,3 @@ verify_jwt = false
 
 [functions.review-resolve]
 verify_jwt = false
-
-[functions.whatsreply-action]
-verify_jwt = false
-
-[functions.track-pageview]
-verify_jwt = false
-
-[functions.account-app]
-verify_jwt = false
