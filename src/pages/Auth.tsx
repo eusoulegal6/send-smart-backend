@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { toast } from "@/hooks/use-toast";
+import { registerForApp, isMemberOfApp } from "@/lib/accountApp";
+
+const APP_KEY = "apps-backend";
 
 const Auth = () => {
   const { user, isReady } = useAuthReady();
@@ -34,11 +37,19 @@ const Auth = () => {
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (error) throw error;
+        await registerForApp(APP_KEY);
         toast({ title: "Account created", description: "You're signed in." });
         navigate("/dashboard", { replace: true });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        const member = await isMemberOfApp(APP_KEY);
+        if (!member) {
+          await supabase.auth.signOut();
+          throw new Error(
+            "This email isn't registered on the Apps Backend hub. Please sign up first.",
+          );
+        }
         navigate("/dashboard", { replace: true });
       }
     } catch (err) {
@@ -50,6 +61,7 @@ const Auth = () => {
   };
 
   const handleGoogle = async () => {
+    sessionStorage.setItem("__pending_app_register", APP_KEY);
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: `${window.location.origin}/auth/callback`,
     });
@@ -59,6 +71,7 @@ const Auth = () => {
       return;
     }
     if (result.redirected) return;
+    await registerForApp(APP_KEY);
     navigate("/dashboard", { replace: true });
   };
 
