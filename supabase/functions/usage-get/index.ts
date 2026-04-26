@@ -151,6 +151,7 @@ serve(async (req) => {
       .from("usage_counters")
       .select("emails_used,input_tokens_used,output_tokens_used")
       .eq("user_id", userId)
+      .eq("app_key", "send-smart")
       .eq("period", period)
       .maybeSingle(),
     admin
