@@ -105,7 +105,7 @@ const { data, error } = await supabase.functions.invoke("usage-get");
 | `used.emails` | `number` | Emails processed this period |
 | `used.inputTokens` | `number` | Input tokens consumed |
 | `used.outputTokens` | `number` | Output tokens consumed |
-| `recent` | `array` | Last 20 reply logs, newest first |
+| `recent` | `array` | Last 20 reply logs, newest first. Each item includes `createdAt`, `subject`, `senderEmail`, `decision`, `draft` (the AI-generated reply text), `inputTokens`, `outputTokens` |
 
 ### Error Responses
 
