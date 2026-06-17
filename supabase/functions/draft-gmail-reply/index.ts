@@ -184,7 +184,7 @@ function recordUsage(
   period: string,
   inputTokens: number,
   outputTokens: number,
-  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string },
+  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string; draft?: string },
   supabaseUrl: string,
   serviceRoleKey: string,
 ) {
