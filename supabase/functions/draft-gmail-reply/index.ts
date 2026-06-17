@@ -263,6 +263,7 @@ function recordUsage(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       decision,
+      draft: meta.draft ?? null,
     }),
   }).catch((err) => console.warn("Reply log insert error:", (err as Error).message));
 }
