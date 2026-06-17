@@ -87,7 +87,10 @@ const { data, error } = await supabase.functions.invoke("usage-get");
       "createdAt": "2026-06-17T14:32:00Z",
       "subject": "Re: Project update",
       "senderEmail": "alice@example.com",
-      "decision": "reply"
+      "decision": "reply",
+      "draft": "Hi Alice,\n\nThanks for the update — looks great. I'll review by Friday.\n\nBest,\nJohn",
+      "inputTokens": 855,
+      "outputTokens": 29
     }
   ]
 }
@@ -102,7 +105,7 @@ const { data, error } = await supabase.functions.invoke("usage-get");
 | `used.emails` | `number` | Emails processed this period |
 | `used.inputTokens` | `number` | Input tokens consumed |
 | `used.outputTokens` | `number` | Output tokens consumed |
-| `recent` | `array` | Last 20 reply logs, newest first |
+| `recent` | `array` | Last 20 reply logs, newest first. Each item includes `createdAt`, `subject`, `senderEmail`, `decision`, `draft` (the AI-generated reply text), `inputTokens`, `outputTokens` |
 
 ### Error Responses
 

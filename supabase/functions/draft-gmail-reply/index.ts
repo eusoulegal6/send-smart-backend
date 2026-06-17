@@ -184,7 +184,7 @@ function recordUsage(
   period: string,
   inputTokens: number,
   outputTokens: number,
-  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string },
+  meta: { subject: string; senderEmail: string; sourceUrl: string; decision?: string; draft?: string },
   supabaseUrl: string,
   serviceRoleKey: string,
 ) {
@@ -263,6 +263,7 @@ function recordUsage(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       decision,
+      draft: meta.draft ?? null,
     }),
   }).catch((err) => console.warn("Reply log insert error:", (err as Error).message));
 }
@@ -443,7 +444,7 @@ Draft a reply now.`;
 
     // --- Fire-and-forget: record usage ---
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl, decision: "reply" }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      recordUsage(userId, period, inputTokens, outputTokens, { subject, senderEmail, sourceUrl, decision: "reply", draft }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
 
     return jsonResponse({ draft, model });

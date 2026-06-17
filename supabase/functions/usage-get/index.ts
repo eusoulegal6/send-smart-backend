@@ -154,7 +154,7 @@ serve(async (req) => {
       .maybeSingle(),
     admin
       .from("reply_logs")
-      .select("created_at,subject,sender_email,decision")
+      .select("created_at,subject,sender_email,decision,draft,input_tokens,output_tokens")
       .eq("user_id", userId)
       .eq("period", period)
       .order("created_at", { ascending: false })
@@ -189,6 +189,9 @@ serve(async (req) => {
       subject: r.subject,
       senderEmail: r.sender_email,
       decision: r.decision,
+      draft: r.draft,
+      inputTokens: r.input_tokens,
+      outputTokens: r.output_tokens,
     })),
   });
 });

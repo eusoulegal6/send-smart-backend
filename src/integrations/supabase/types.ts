@@ -177,6 +177,7 @@ export type Database = {
         Row: {
           created_at: string
           decision: string
+          draft: string | null
           id: string
           input_tokens: number
           output_tokens: number
@@ -189,6 +190,7 @@ export type Database = {
         Insert: {
           created_at?: string
           decision?: string
+          draft?: string | null
           id?: string
           input_tokens?: number
           output_tokens?: number
@@ -201,6 +203,7 @@ export type Database = {
         Update: {
           created_at?: string
           decision?: string
+          draft?: string | null
           id?: string
           input_tokens?: number
           output_tokens?: number
