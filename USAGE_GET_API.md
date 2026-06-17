@@ -128,3 +128,87 @@ const { data, error } = await supabase.functions.invoke("usage-get");
 - Response includes `Cache-Control: no-store`.
 - `recent` items are drawn from `reply_logs` filtered to the current period.
 - Missing counters are returned as `0` (no error).
+- `recent[].draft` may be `null` for log entries created before drafts were persisted (anything before 2026-06-17).
+
+---
+
+## Displaying Drafts in the Web App
+
+Each `recent[]` item now carries the full AI-generated reply text under `draft`. Render it as a collapsible/expandable panel below the subject line. Preserve newlines (`white-space: pre-wrap`).
+
+### React example
+
+```tsx
+type RecentReply = {
+  createdAt: string;
+  subject: string | null;
+  senderEmail: string | null;
+  decision: "reply" | "skip" | string;
+  draft: string | null;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+function RecentReplyCard({ item }: { item: RecentReply }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <article className="rounded-lg border p-4">
+      <header className="flex items-baseline justify-between">
+        <h3 className="font-medium">{item.subject ?? "(no subject)"}</h3>
+        <time className="text-xs text-muted-foreground">
+          {new Date(item.createdAt).toLocaleString()}
+        </time>
+      </header>
+      <p className="text-sm text-muted-foreground">
+        {item.senderEmail} · {item.inputTokens} in / {item.outputTokens} out
+      </p>
+
+      {item.draft ? (
+        <>
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="mt-2 text-sm underline"
+          >
+            {open ? "Hide draft" : "Show draft"}
+          </button>
+          {open && (
+            <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-3 text-sm">
+              {item.draft}
+            </pre>
+          )}
+          <button
+            onClick={() => navigator.clipboard.writeText(item.draft!)}
+            className="ml-3 text-sm underline"
+          >
+            Copy
+          </button>
+        </>
+      ) : (
+        <p className="mt-2 text-xs italic text-muted-foreground">
+          Draft not stored for this entry.
+        </p>
+      )}
+    </article>
+  );
+}
+```
+
+### Field reference for `recent[]`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `createdAt` | ISO string | Server-side timestamp |
+| `subject` | string \| null | Truncated to 300 chars |
+| `senderEmail` | string \| null | Truncated to 320 chars |
+| `decision` | string | Usually `"reply"` |
+| `draft` | string \| null | Full AI-generated reply. Preserve newlines. May be null for legacy rows. |
+| `inputTokens` | number | Anthropic input token count |
+| `outputTokens` | number | Anthropic output token count |
+
+### Privacy reminder
+
+Drafts are sensitive user content. The web app should:
+- Only render them inside the authenticated dashboard (never on public pages).
+- Avoid sending them to third-party analytics or error trackers.
+- Respect the `Cache-Control: no-store` header — do not cache responses client-side beyond the active session.
+
