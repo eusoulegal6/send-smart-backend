@@ -389,7 +389,7 @@ Draft a reply now.`;
     return jsonResponse({ error: "Server configuration error." }, 500);
   }
 
-  const model = "claude-sonnet-4-20250514";
+  const model = "claude-sonnet-4-5";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
 
