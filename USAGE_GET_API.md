@@ -87,7 +87,10 @@ const { data, error } = await supabase.functions.invoke("usage-get");
       "createdAt": "2026-06-17T14:32:00Z",
       "subject": "Re: Project update",
       "senderEmail": "alice@example.com",
-      "decision": "reply"
+      "decision": "reply",
+      "draft": "Hi Alice,\n\nThanks for the update — looks great. I'll review by Friday.\n\nBest,\nJohn",
+      "inputTokens": 855,
+      "outputTokens": 29
     }
   ]
 }
