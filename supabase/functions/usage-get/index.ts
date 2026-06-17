@@ -189,6 +189,9 @@ serve(async (req) => {
       subject: r.subject,
       senderEmail: r.sender_email,
       decision: r.decision,
+      draft: r.draft,
+      inputTokens: r.input_tokens,
+      outputTokens: r.output_tokens,
     })),
   });
 });
