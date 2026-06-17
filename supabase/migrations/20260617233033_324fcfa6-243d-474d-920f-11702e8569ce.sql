@@ -1,0 +1,1 @@
+ALTER TABLE public.reply_logs ADD COLUMN IF NOT EXISTS draft text;
